@@ -221,7 +221,7 @@ def process(requirement_file, strategy, level=Level.STANDARD):
     if groups['risky']:
         print('check risky packages...')
         print(format(groups['risky']))
-        #write_packages(groups['risky'], all)
+        write_packages(groups['risky'], all)
         ret = -1
 
     if groups['excluded']:
@@ -281,6 +281,7 @@ def parse_args(args):
         '-r', '--rfile', dest='requirement_txt_file',
         help='path/to/requirement.txt file', nargs='?',
         default='./requirements.txt')
+    parser.add_argument('-v', required=False, action='store_true')
     return parser.parse_args(args)
 
 
@@ -290,11 +291,12 @@ def run(args):
 
 
 def main():
-    print('before', pkg_resources.working_set.entries)
-    sys.path.append('/Users/matwong/Downloads/backend/bowtie-api-master/myenv/lib/python3.7/site-packages')
-    pkg_resources.working_set.add_entry(os.getcwd())
-    print('after', pkg_resources.working_set.entries)
+        
+    
     args = parse_args(sys.argv[1:])
+    if args.v:
+       pkg_resources.working_set.entries = [os.environ['VIRTUAL_ENV'] + '/lib/python3.7/site-packages']
+    print('after', pkg_resources.working_set.entries)
     sys.exit(run(args))
 
 
