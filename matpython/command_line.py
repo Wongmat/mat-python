@@ -9,8 +9,9 @@ import functools
 import re
 import textwrap
 import sys
-
+import json
 import pkg_resources
+import os
 
 try:
     from pip._internal.download import PipSession
@@ -27,7 +28,7 @@ class Strategy:
     def __init__(self):
         self.AUTHORIZED_LICENSES = []
         self.UNAUTHORIZED_LICENSES = []
-        self.AUTHORIZED_PACKAGES = []
+        self.GREENLIST = []
 
 
 class Level(enum.Enum):
@@ -48,9 +49,11 @@ class Level(enum.Enum):
 
 
 class Reason(enum.Enum):
-    OK = 'OK'
-    UNAUTHORIZED = 'UNAUTHORIZED'
+    SAFE = 'SAFE'
+    RISKY = 'RISKY'
+    DIFFVER = 'DIFFVER'
     UNKNOWN = 'UNKNOWN'
+    EXCLUDED = 'EXCLUDED'
 
 
 def get_packages_info(requirement_file):
@@ -98,7 +101,6 @@ def get_packages_info(requirement_file):
         if license.lower().endswith(" license"):
             return license[:-len(" license")]
         return license
-
     packages = [transform(dist) for dist in pkg_resources.working_set.resolve(requirements)]
     # keep only unique values as there are maybe some duplicates
     unique = []
@@ -107,23 +109,29 @@ def get_packages_info(requirement_file):
     return sorted(unique, key=(lambda item: item['name'].lower()))
 
 
-def check_package(strategy, pkg, level=Level.STANDARD):
-    whitelisted = (
-            pkg['name'] in strategy.AUTHORIZED_PACKAGES and (
-                strategy.AUTHORIZED_PACKAGES[pkg['name']] == pkg['version']
-                or (level == Level.STANDARD and strategy.AUTHORIZED_PACKAGES[pkg['name']] == '')
-            )
-    )
-    if whitelisted:
-        return Reason.OK
+def check_package(strategy, pkg):
 
-    at_least_one_unauthorized = False
+    if len(pkg['licenses']) == 0:
+        return Reason.UNKNOWN
+    
+    if pkg['name'] in strategy.EXLIST:
+        if pkg['version'] == strategy.EXLIST[pkg['name']]['version']: 
+            return Reason.EXCLUDED
+        else: return Reason.DIFFVER
+
+    for lic in pkg['licenses']:
+        if lic in strategy.GREENLIST:
+            return Reason.SAFE
+
+    return Reason.RISKY
+
+    '''at_least_one_unauthorized = False
     count_authorized = 0
     for license in pkg['licenses']:
         lower = license.lower()
         if lower in strategy.UNAUTHORIZED_LICENSES:
             at_least_one_unauthorized = True
-        if lower in strategy.AUTHORIZED_LICENSES:
+        if lower in strategy.GREENLIST:
             count_authorized += 1
 
     if (count_authorized and level is Level.STANDARD) \
@@ -131,13 +139,11 @@ def check_package(strategy, pkg, level=Level.STANDARD):
                 and level is Level.CAUTIOUS) \
             or (count_authorized and count_authorized == len(pkg['licenses'])
                 and level is Level.PARANOID):
-        return Reason.OK
+        return Reason.OK'''
 
     # if not OK and at least one unauthorized
-    if at_least_one_unauthorized:
-        return Reason.UNAUTHORIZED
+    
 
-    return Reason.UNKNOWN
 
 
 def find_parents(package, all, seen):
@@ -168,11 +174,28 @@ def write_packages(packages, all):
         write_package(package, all)
 
 
-def group_by(items, key):
+def group_by(items, strategy):
     res = collections.defaultdict(list)
+    
     for item in items:
-        res[key(item)].append(item)
+        if len(item['licenses']) == 0:
+            res['unknown'].append(item)
 
+        for lic in item['licenses']:
+            if lic in strategy.GREENLIST:
+                res['safe'].append(item)
+   
+
+        if item not in res['safe']: 
+            res['risky'].append(item)
+            if item['name'] in strategy.EXLIST:
+                if item['version'] == strategy.EXLIST[item['name']]['version']: 
+                    res['excluded'].append(item)
+                else: res['diffver'].append(item)  
+        
+        res['remaining'] = list(filter(lambda item: item not in res['excluded'], res['risky']))
+        #print('remaining', res['remaining'])
+    
     return res
 
 
@@ -182,51 +205,59 @@ def process(requirement_file, strategy, level=Level.STANDARD):
     all = list(pkg_info)
     print('{} package{} and dependencies.'.format(len(pkg_info), '' if len(pkg_info) <= 1 else 's'))
     groups = group_by(
-        pkg_info, functools.partial(check_package, strategy, level=level))
+        pkg_info, strategy)
     ret = 0
-
+    #print("groups", groups)
     def format(l):
         return '{} package{}.'.format(len(l), '' if len(l) <= 1 else 's')
 
-    if groups[Reason.OK]:
-        print('check authorized packages...')
-        print(format(groups[Reason.OK]))
+    #print('groups', pkg_info)
 
-    if groups[Reason.UNAUTHORIZED]:
-        print('check unauthorized packages...')
-        print(format(groups[Reason.UNAUTHORIZED]))
-        write_packages(groups[Reason.UNAUTHORIZED], all)
+    if groups['safe']:
+        print('check safe packages...')
+        print(format(groups['safe']))
+        #write_packages(groups['safe'], all)
+
+    if groups['risky']:
+        print('check risky packages...')
+        print(format(groups['risky']))
+        #write_packages(groups['risky'], all)
         ret = -1
 
-    if groups[Reason.UNKNOWN]:
+    if groups['excluded']:
+        print('check excluded packages...')
+        print(format(groups['excluded']))
+        write_packages(groups['excluded'], all)
+        ret = -1
+    
+    if groups['diffver']:
+        print('check diff. version packages...')
+        print(format(groups['diffver']))
+        write_packages(groups['diffver'], all)
+        ret = -1
+
+    if groups['unknown']:
         print('check unknown packages...')
-        print(format(groups[Reason.UNKNOWN]))
-        write_packages(groups[Reason.UNKNOWN], all)
+        print(format(groups['unknown']))
+        write_packages(groups['unknown'], all)
         ret = -1
 
+    with open('./result.json', 'w') as outfile:  
+        json.dump(groups, outfile)
     return ret
 
 
 def read_strategy(strategy_file):
-    config = ConfigParser()
-    # keep case of options
-    config.optionxform = str
-    config.read(strategy_file)
-    strategy = Strategy()
-
-    def get_config_list(section, option):
-        try:
-            value = config.get(section, option)
-        except NoOptionError:
-            return []
-        return [item for item in value.lower().split('\n') if item]
-
-    strategy.AUTHORIZED_LICENSES = get_config_list('Licenses', 'authorized_licenses')
-    strategy.UNAUTHORIZED_LICENSES = get_config_list('Licenses', 'unauthorized_licenses')
-    strategy.AUTHORIZED_PACKAGES = dict()
-    if config.has_section('Authorized Packages'):
+    with open(strategy_file) as json_file:
+        file = json.load(json_file)
+    strategy = Strategy
+    strategy.GREENLIST = file['greenlist']
+    strategy.UNAUTHORIZED_LICENSES = file['unauthorized']
+    strategy.EXLIST = file['excluded']
+    #print("exlist", strategy.EXLIST)
+    '''if config.has_section('Authorized Packages'):
         for name, value in config.items('Authorized Packages'):
-            strategy.AUTHORIZED_PACKAGES[name] = value
+            strategy.AUTHORIZED_PACKAGES[name] = value'''
     return strategy
 
 
@@ -235,7 +266,7 @@ def parse_args(args):
         description='Check license of packages and there dependencies.',
         formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument(
-        '-s', '--sfile', dest='strategy_ini_file', help='strategy ini file',
+        '-s', '--sfile', dest='strategy_file', help='strategy file',
         required=True)
     parser.add_argument(
         '-l', '--level', choices=Level,
@@ -254,11 +285,15 @@ def parse_args(args):
 
 
 def run(args):
-    strategy = read_strategy(args.strategy_ini_file)
+    strategy = read_strategy(args.strategy_file)
     return process(args.requirement_txt_file, strategy, args.level)
 
 
 def main():
+    print('before', pkg_resources.working_set.entries)
+    sys.path.append('/Users/matwong/Downloads/backend/bowtie-api-master/myenv/lib/python3.7/site-packages')
+    pkg_resources.working_set.add_entry(os.getcwd())
+    print('after', pkg_resources.working_set.entries)
     args = parse_args(sys.argv[1:])
     sys.exit(run(args))
 

@@ -18,22 +18,18 @@ with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    name='liccheck',
+    name='mat-python',
 
     # Versions should comply with PEP440.  For a discussion on single-sourcing
     # the version across setup.py and the project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
-    version='0.3.9',
+    version='0.1',
 
     description='Check python packages from requirement.txt and report issues',
     long_description=long_description,
 
     # The project's main homepage.
-    url='https://github.com/dhatim/python-license-check',
-
-    # Author details
-    author='Dhatim',
-    author_email='dev-oss@dhatim.com',
+    url='https://github.com/wong-mat',
 
     # Choose your license
     license='Apache Software License',
@@ -69,7 +65,7 @@ setup(
 
     # You can just specify the packages manually here if your project is
     # simple. Or you can use find_packages().
-    packages=['liccheck'],
+    packages=['matpython'],
 
     # Alternatively, if you want to distribute just a my_module.py, uncomment
     # this:
@@ -108,7 +104,7 @@ setup(
     # pip to create the appropriate form of executable for the target platform.
     entry_points={
         'console_scripts': [
-            'liccheck=liccheck.command_line:main'
+            'mat-python=matpython.command_line:main'
         ],
     },
 )

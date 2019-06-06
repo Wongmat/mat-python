@@ -1,0 +1,13 @@
+{
+    "pytz": {
+        "version": "2018.7",
+        "license": "BSD",
+        "reason": "KEK"
+    },
+
+    "pandas": {
+        "version": "0.24.2",
+        "license": "BSD",
+        "reason": "KEK KEK"
+    }
+}

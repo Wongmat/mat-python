@@ -1,0 +1,11 @@
+{
+    "greenlist": ["MIT", "ISC", "BSD 3 Clause", "Apache 2.0", 
+        "BSD 2 Clause", "CC0", "W3C", "JSON", 
+        "WTFPL", "Unlicense", "Amazon Software License", "CC BY 3.0",
+        "W3C 3-clause BSD License", "Zlib", "Public Domain", "Standard PIL License", 
+        "Simplified BSD", "Apache Software License", "New BSD License", "ZPL 2.1"],
+
+    "excluded": {"pandas": {"version": "0.24.1"}, "pytz": {"version": "2018.6"}, "numpy": {"version": "1.16.4"}},
+
+    "unauthorized": ["GPL v3"]
+}
