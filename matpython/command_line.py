@@ -12,6 +12,8 @@ import sys
 import json
 import pkg_resources
 import os
+import venv
+import subprocess
 
 try:
     from pip._internal.download import PipSession
@@ -101,7 +103,9 @@ def get_packages_info(requirement_file):
         if license.lower().endswith(" license"):
             return license[:-len(" license")]
         return license
-    packages = [transform(dist) for dist in pkg_resources.working_set.resolve(requirements)]
+    envTest = pkg_resources.Environment(['./venvTest/lib/python3.7/site-packages'])
+    #print('env3', envTest._distmap)
+    packages = [transform(dist) for dist in pkg_resources.working_set.resolve(requirements, envTest, None)]
     # keep only unique values as there are maybe some duplicates
     unique = []
     [unique.append(item) for item in packages if item not in unique]
@@ -267,7 +271,7 @@ def parse_args(args):
         formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument(
         '-s', '--sfile', dest='strategy_file', help='strategy file',
-        required=True)
+        required=False)
     parser.add_argument(
         '-l', '--level', choices=Level,
         default=Level.STANDARD, type=Level.starting,
@@ -287,18 +291,27 @@ def parse_args(args):
 
 def run(args):
     strategy = read_strategy(args.strategy_file)
-    return process(args.requirement_txt_file, strategy, args.level)
+    process(args.requirement_txt_file, strategy, args.level)
 
 
 def main():
-        
-    
+    strategy = read_strategy('./exclusionList2.json')
+    #for dir in os.listdir('.'):
+      #  print(os.listdir('.'))
+       # if os.path.isdir(dir):
+        #    print('Processing ' + dir) 
+    venv.create('venvTest',with_pip=True)
+    subprocess.call(['venvTest/bin/pip', 'install', '-r', 'requirements.txt'])
     args = parse_args(sys.argv[1:])
-    if args.v:
-       pkg_resources.working_set.entries = [os.environ['VIRTUAL_ENV'] + '/lib/python3.7/site-packages']
-    print('after', pkg_resources.working_set.entries)
-    sys.exit(run(args))
+    sys.path = ['venvTest/lib/python3.7/site-packages']
+    pkg_resources.working_set.entries = ['./venvTest/lib/python3.7/site-packages']
+            #pkg_resources.
+    #print('after', pkg_resources.working_set.entries)
+    
+    process('./requirements.txt', strategy, args.level)        
+    #print('dirs', os.listdir('.'))
+
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
