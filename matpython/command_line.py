@@ -1,3 +1,4 @@
+
 import argparse
 import collections
 try:
@@ -5,11 +6,13 @@ try:
 except ImportError:
     from ConfigParser import ConfigParser, NoOptionError
 import enum
+#print("FIRST IMPORT")
 import functools
 import re
 import textwrap
 import sys
 import json
+#print("F2 IMPORT")
 import pkg_resources
 import os
 import venv
@@ -33,7 +36,7 @@ class Strategy:
         self.GREENLIST = []
 
 
-class Level(enum.Enum):
+'''class Level(enum.Enum):
     STANDARD = 'STANDARD'
     CAUTIOUS = 'CAUTIOUS'
     PARANOID = 'PARANOID'
@@ -47,8 +50,7 @@ class Level(enum.Enum):
         raise ValueError("No level starting with {!r}".format(value))
 
     def __str__(self):
-        return self.name
-
+        return self.name'''
 
 class Reason(enum.Enum):
     SAFE = 'SAFE'
@@ -58,7 +60,7 @@ class Reason(enum.Enum):
     EXCLUDED = 'EXCLUDED'
 
 
-def get_packages_info(requirement_file):
+def get_packages_info(requirement_file, envDir):
     regex_license = re.compile(r'License: (?P<license>[^\r\n]+)\r?\n')
     regex_classifier = re.compile(r'Classifier: License :: OSI Approved :: (?P<classifier>[^\r\n]+)\r?\n')
 
@@ -103,9 +105,10 @@ def get_packages_info(requirement_file):
         if license.lower().endswith(" license"):
             return license[:-len(" license")]
         return license
-    envTest = pkg_resources.Environment(['./venvTest/lib/python3.7/site-packages'])
+    #print('envDir', envDir + 'venvTest2/lib/python3.7/site-packages')
+    envTest = pkg_resources.Environment([envDir + '/venvTest2/lib/python3.7/site-packages'])
     #print('env3', envTest._distmap)
-    packages = [transform(dist) for dist in pkg_resources.working_set.resolve(requirements, envTest, None)]
+    packages = [transform(dist) for dist in pkg_resources.working_set.resolve(requirements = requirements, env = envTest)]
     # keep only unique values as there are maybe some duplicates
     unique = []
     [unique.append(item) for item in packages if item not in unique]
@@ -203,9 +206,9 @@ def group_by(items, strategy):
     return res
 
 
-def process(requirement_file, strategy, level=Level.STANDARD):
+def process(requirement_file, strategy, envDir):
     print('gathering licenses...')
-    pkg_info = get_packages_info(requirement_file)
+    pkg_info = get_packages_info(requirement_file, envDir)
     all = list(pkg_info)
     print('{} package{} and dependencies.'.format(len(pkg_info), '' if len(pkg_info) <= 1 else 's'))
     groups = group_by(
@@ -216,7 +219,7 @@ def process(requirement_file, strategy, level=Level.STANDARD):
         return '{} package{}.'.format(len(l), '' if len(l) <= 1 else 's')
 
     #print('groups', pkg_info)
-
+    '''
     if groups['safe']:
         print('check safe packages...')
         print(format(groups['safe']))
@@ -244,9 +247,9 @@ def process(requirement_file, strategy, level=Level.STANDARD):
         print('check unknown packages...')
         print(format(groups['unknown']))
         write_packages(groups['unknown'], all)
-        ret = -1
-
-    with open('./result.json', 'w') as outfile:  
+        ret = -1 '''
+    print("WRITING " + envDir + '.json')
+    with open(envDir + '.json', 'w') as outfile:  
         json.dump(groups, outfile)
     return ret
 
@@ -272,7 +275,7 @@ def parse_args(args):
     parser.add_argument(
         '-s', '--sfile', dest='strategy_file', help='strategy file',
         required=False)
-    parser.add_argument(
+    '''parser.add_argument(
         '-l', '--level', choices=Level,
         default=Level.STANDARD, type=Level.starting,
         help=textwrap.dedent("""\
@@ -280,7 +283,7 @@ def parse_args(args):
               Standard - At least one authorized license (default);
               Cautious - Per standard but no unauthorized licenses;
               Paranoid - All licenses must by authorized.
-        """))
+        """))'''
     parser.add_argument(
         '-r', '--rfile', dest='requirement_txt_file',
         help='path/to/requirement.txt file', nargs='?',
@@ -291,24 +294,29 @@ def parse_args(args):
 
 def run(args):
     strategy = read_strategy(args.strategy_file)
-    process(args.requirement_txt_file, strategy, args.level)
+    process(args.requirement_txt_file, strategy)
 
 
 def main():
+    dirs = list(filter(lambda entry : os.path.isfile(entry + '/requirements.txt') , os.listdir('.')))
+    #print(dirs)
     strategy = read_strategy('./exclusionList2.json')
     #for dir in os.listdir('.'):
       #  print(os.listdir('.'))
        # if os.path.isdir(dir):
         #    print('Processing ' + dir) 
-    venv.create('venvTest',with_pip=True)
-    subprocess.call(['venvTest/bin/pip', 'install', '-r', 'requirements.txt'])
-    args = parse_args(sys.argv[1:])
-    sys.path = ['venvTest/lib/python3.7/site-packages']
-    pkg_resources.working_set.entries = ['./venvTest/lib/python3.7/site-packages']
+    for dir in dirs:
+        print("CHECKING " + dir)
+        envDir = './' + dir
+        venv.create(envDir + '/venvTest2',with_pip=True)
+    #subprocess.call(['source ./venvTest/bin/activate'])
+        subprocess.call([envDir + '/venvTest2/bin/pip', 'install', '-q', '-r', envDir +  '/requirements.txt'])
+        args = parse_args(sys.argv[1:])
+        sys.path = [envDir +  '/venvTest2/lib/python3.7/site-packages']
+        pkg_resources.working_set.entries = [envDir +  '/venvTest2/lib/python3.7/site-packages']
             #pkg_resources.
     #print('after', pkg_resources.working_set.entries)
-    
-    process('./requirements.txt', strategy, args.level)        
+        process(envDir +  '/requirements.txt', strategy, envDir)        
     #print('dirs', os.listdir('.'))
 
 
